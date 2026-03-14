@@ -1,0 +1,123 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "forgeboard"
+version = "0.1.0-dev"
+description = "AI-driven CAD assembly orchestration engine"
+readme = "README.md"
+license = { file = "LICENSE.md" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Ilija Panov", email = "ilija.panov@example.com" },
+]
+keywords = ["cad", "assembly", "build123d", "engineering", "ai", "mcp"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "build123d>=0.7",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+render = [
+    "pyrender",
+    "trimesh",
+    "Pillow",
+    "numpy",
+]
+procure = [
+    "httpx",
+    "beautifulsoup4",
+    "pdfplumber",
+]
+mcp = [
+    "mcp>=1.0",
+]
+llm = [
+    "anthropic>=0.40",
+]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+all = [
+    "forgeboard[render,procure,mcp,llm,dev]",
+]
+
+[project.scripts]
+forgeboard = "forgeboard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/forgeboard/forgeboard"
+Repository = "https://github.com/forgeboard/forgeboard"
+Issues = "https://github.com/forgeboard/forgeboard/issues"
+
+# -- Ruff ------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",  # line length handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["forgeboard"]
+
+# -- Mypy -------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "build123d.*",
+    "OCP.*",
+    "pyrender.*",
+    "trimesh.*",
+    "pdfplumber.*",
+]
+ignore_missing_imports = true
+
+# -- Pytest -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring CAD kernel",
+]

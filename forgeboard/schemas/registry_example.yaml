@@ -1,0 +1,218 @@
+# ForgeBoard Component Registry -- Example
+# ==========================================
+# A desk lamp assembly demonstrating the full registry schema.
+#
+# Schema overview:
+#   version:    Registry format version
+#   project:    Human-readable project name
+#   components: Map of category -> list of component specs
+#
+# Each component spec contains:
+#   id:           Unique identifier (project prefix + category code + number)
+#   name:         Human-readable name (no spaces -- use underscores)
+#   description:  Free-text description
+#   is_cots:      true if purchased, false if custom-manufactured
+#   material:     Nested material block (name, density, strength, cost, methods)
+#   dimensions:   Key-value dimension pairs (all in mm unless noted)
+#   interfaces:   Named connection points with position, normal, type, diameter
+#   mass_g:       Component mass in grams
+#   procurement:  Sourcing details (supplier, url, sku, unit_cost, lead_time)
+
+version: "1.0"
+project: "Adjustable Desk Lamp"
+
+components:
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: STRUCTURE
+  # Physical frame, housing, and mechanical parts
+  # ---------------------------------------------------------------------------
+
+  structure:
+
+    - id: "LAMP-MECH-001"
+      name: "Base_Plate"
+      description: "Weighted base plate that prevents the lamp from tipping over"
+      is_cots: false
+      material:
+        name: "PLA"
+        density_g_cm3: 1.24
+        yield_strength_mpa: 50.0
+        cost_per_kg: 25.0
+        manufacturing_methods:
+          - "FDM 3D print"
+      dimensions:
+        diameter_mm: 150
+        height_mm: 8
+        center_bore_mm: 12.5
+        weight_pocket_diameter_mm: 120
+        weight_pocket_depth_mm: 5
+        rubber_pad_count: 4
+        rubber_pad_diameter_mm: 15
+      interfaces:
+        arm_socket:
+          type: "cylindrical"
+          position: { x: 0, y: 0, z: 8 }
+          normal: { x: 0, y: 0, z: 1 }
+          diameter_mm: 12.5
+          note: "Receives the telescopic arm bottom tube"
+        bottom_pads:
+          type: "planar"
+          position: { x: 0, y: 0, z: 0 }
+          normal: { x: 0, y: 0, z: -1 }
+          note: "4x adhesive rubber pads on bottom face"
+      mass_g: 220
+      procurement:
+        type: "custom_manufactured"
+        method: "FDM 3D print"
+        material: "PLA filament"
+        unit_cost: 3.50
+        lead_time_days: 1
+        notes: "Print with 40% infill for weight. Insert steel washers in pocket."
+
+    - id: "LAMP-MECH-002"
+      name: "Telescopic_Arm"
+      description: "Two-section telescopic arm allowing height adjustment"
+      is_cots: true
+      material:
+        name: "Aluminum_6061"
+        density_g_cm3: 2.70
+        yield_strength_mpa: 276.0
+        thermal_conductivity: 167.0
+        cost_per_kg: 8.0
+        manufacturing_methods:
+          - "extrusion"
+          - "tube drawing"
+      dimensions:
+        lower_section_od_mm: 12
+        lower_section_id_mm: 10
+        lower_section_length_mm: 200
+        upper_section_od_mm: 10
+        upper_section_id_mm: 8
+        upper_section_length_mm: 180
+        overlap_mm: 30
+        collapsed_length_mm: 200
+        extended_length_mm: 350
+        lock_type: "thumb screw"
+        lock_bolt_size: "M4"
+      interfaces:
+        base_insert:
+          type: "cylindrical"
+          position: { x: 0, y: 0, z: 0 }
+          normal: { x: 0, y: 0, z: -1 }
+          diameter_mm: 12
+          note: "Lower tube inserts into base plate bore"
+        head_mount:
+          type: "cylindrical"
+          position: { x: 0, y: 0, z: 350 }
+          normal: { x: 0, y: 0, z: 1 }
+          diameter_mm: 10
+          note: "Upper tube receives lamp head bracket clamp"
+      mass_g: 85
+      procurement:
+        supplier: "Amazon / AliExpress"
+        sku: "ALU-TELE-12-10-350"
+        unit_cost: 8.50
+        lead_time_days: 7
+        url: "https://example.com/telescopic-tube"
+        notes: "Sold as generic telescopic tube with friction lock"
+
+    - id: "LAMP-MECH-003"
+      name: "Lamp_Head_Bracket"
+      description: "Sheet metal bracket connecting the arm to the LED module housing"
+      is_cots: false
+      material:
+        name: "Steel_1018"
+        density_g_cm3: 7.87
+        yield_strength_mpa: 370.0
+        thermal_conductivity: 51.9
+        cost_per_kg: 3.0
+        manufacturing_methods:
+          - "sheet metal bending"
+          - "laser cutting"
+      dimensions:
+        overall_length_mm: 80
+        overall_width_mm: 40
+        thickness_mm: 1.5
+        arm_clamp_bore_mm: 10.5
+        arm_clamp_height_mm: 25
+        led_mount_bolt_pattern_mm: 30
+        led_mount_bolt_size: "M3"
+        led_mount_bolt_count: 4
+        bend_angle_deg: 90
+        bend_radius_mm: 3
+      interfaces:
+        arm_clamp:
+          type: "cylindrical"
+          position: { x: 0, y: 0, z: 0 }
+          normal: { x: 0, y: 0, z: -1 }
+          diameter_mm: 10.5
+          note: "Split clamp grips 10mm OD upper arm section, M4 pinch screw"
+        led_face:
+          type: "planar"
+          position: { x: 0, y: -40, z: 0 }
+          normal: { x: 0, y: -1, z: 0 }
+          note: "4x M3 bolt holes for LED module, 30mm square pattern"
+      mass_g: 45
+      procurement:
+        type: "custom_manufactured"
+        method: "Laser cut + CNC bend"
+        supplier: "SendCutSend"
+        unit_cost: 12.00
+        lead_time_days: 5
+        notes: "1.5mm mild steel, powder coat matte black"
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: ELECTRONICS
+  # LED module, driver, and wiring
+  # ---------------------------------------------------------------------------
+
+  electronics:
+
+    - id: "LAMP-ELEC-001"
+      name: "LED_Module"
+      description: "High-CRI LED module with integrated heatsink and diffuser"
+      is_cots: true
+      material:
+        name: "Aluminum_heatsink"
+        density_g_cm3: 2.70
+        manufacturing_methods:
+          - "die casting"
+      dimensions:
+        board_diameter_mm: 30
+        board_thickness_mm: 1.6
+        heatsink_diameter_mm: 35
+        heatsink_height_mm: 10
+        diffuser_diameter_mm: 32
+        diffuser_height_mm: 5
+        total_height_mm: 16.6
+        mounting_hole_pattern_mm: 30
+        mounting_hole_size: "M3"
+        mounting_hole_count: 4
+      interfaces:
+        bracket_mount:
+          type: "planar"
+          position: { x: 0, y: 0, z: 0 }
+          normal: { x: 0, y: 0, z: 1 }
+          note: "4x M3 bolts on 30mm square pattern, mates with head bracket"
+        power_input:
+          type: "planar"
+          position: { x: 15, y: 0, z: 5 }
+          normal: { x: 1, y: 0, z: 0 }
+          note: "2-pin JST-XH connector for 12V DC input"
+      mass_g: 25
+      procurement:
+        supplier: "Digi-Key"
+        sku: "BXRC-30E1000-B-73"
+        unit_cost: 6.75
+        lead_time_days: 3
+        url: "https://www.digikey.com/en/products/detail/bridgelux/BXRC-30E1000-B-73"
+        notes: "Bridgelux Vero 10, 3000K, CRI 90+, 1000 lm"
+      color_rgba: [1.0, 0.95, 0.8, 1.0]
+      electrical:
+        voltage_v: 12
+        current_ma: 350
+        power_w: 4.2
+        cri: 90
+        color_temp_k: 3000
+        lumens: 1000

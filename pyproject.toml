@@ -63,6 +63,9 @@ all = [
 [project.scripts]
 forgeboard = "forgeboard.cli:main"
 
+[project.entry-points."mcp"]
+forgeboard = "forgeboard.mcp_server.runner:run_mcp_server"
+
 [project.urls]
 Homepage = "https://github.com/forgeboard/forgeboard"
 Repository = "https://github.com/forgeboard/forgeboard"

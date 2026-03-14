@@ -122,30 +122,16 @@ def bom(assembly: Path, output_format: str, output: Path | None) -> None:
 
 
 @main.command()
-@click.option(
-    "--host",
-    default="127.0.0.1",
-    show_default=True,
-    help="Host to bind the MCP server to.",
-)
-@click.option(
-    "--port",
-    default=8370,
-    show_default=True,
-    type=int,
-    help="Port to bind the MCP server to.",
-)
-def serve(host: str, port: int) -> None:
+def serve() -> None:
     """Start the ForgeBoard MCP server.
 
-    Launches a Model Context Protocol server that exposes ForgeBoard
-    capabilities to AI coding agents.
+    Launches a Model Context Protocol server via stdio that exposes
+    ForgeBoard capabilities to AI coding agents (Claude Code, Cursor,
+    Windsurf, etc.).
     """
-    click.echo(f"[forgeboard serve] Starting MCP server:")
-    click.echo(f"  Host: {host}")
-    click.echo(f"  Port: {port}")
-    click.echo()
-    click.echo("  Status: not yet implemented")
+    from forgeboard.mcp_server.runner import run_mcp_server
+
+    run_mcp_server()
 
 
 @main.command()

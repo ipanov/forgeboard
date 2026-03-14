@@ -1,4 +1,5 @@
-"""ForgeBoard core module -- types, registry, validation, and dependency tracking."""
+"""ForgeBoard core module -- types, registry, validation, dependency tracking,
+cascade engine, event bus, and project orchestration."""
 
 from forgeboard.core.types import (
     AXIS_X,
@@ -31,6 +32,28 @@ from forgeboard.core.validation import (
     ValidationReport,
 )
 from forgeboard.core.dependency_graph import DependencyGraph
+from forgeboard.core.cascade import (
+    AffectedComponent,
+    CascadeEngine,
+    CascadeListener,
+    CascadePreview,
+    CascadeResult,
+    UpdateStatus,
+)
+from forgeboard.core.events import (
+    ALL_EVENT_TYPES,
+    ASSEMBLY_UPDATED,
+    BOM_UPDATED,
+    COLLISION_DETECTED,
+    COMPONENT_CREATED,
+    COMPONENT_DELETED,
+    COMPONENT_UPDATED,
+    COST_CHANGED,
+    MASS_CHANGED,
+    VALIDATION_FAILED,
+    EventBus,
+)
+from forgeboard.core.project import ForgeProject, MassProperties
 
 __all__ = [
     # Geometry
@@ -68,6 +91,28 @@ __all__ = [
     "Placement",
     # Registry
     "ComponentRegistry",
-    # Dependency
+    # Dependency graph
     "DependencyGraph",
+    # Cascade engine
+    "CascadeEngine",
+    "CascadeResult",
+    "CascadePreview",
+    "CascadeListener",
+    "AffectedComponent",
+    "UpdateStatus",
+    # Event bus
+    "EventBus",
+    "COMPONENT_CREATED",
+    "COMPONENT_UPDATED",
+    "COMPONENT_DELETED",
+    "ASSEMBLY_UPDATED",
+    "BOM_UPDATED",
+    "VALIDATION_FAILED",
+    "COLLISION_DETECTED",
+    "COST_CHANGED",
+    "MASS_CHANGED",
+    "ALL_EVENT_TYPES",
+    # Project
+    "ForgeProject",
+    "MassProperties",
 ]

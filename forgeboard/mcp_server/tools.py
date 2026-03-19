@@ -12,9 +12,19 @@ are clearly namespaced in the AI assistant's tool list.
 from __future__ import annotations
 
 import json
+import logging
+import sys
 import traceback
 from dataclasses import asdict
 from typing import Any
+
+# Configure logging to stderr so it shows in the terminal running the MCP server
+logging.basicConfig(
+    level=logging.INFO,
+    format="[ForgeBoard %(levelname)s] %(message)s",
+    stream=sys.stderr,
+)
+logger = logging.getLogger("forgeboard.mcp")
 
 from forgeboard.mcp_server.server import get_project, mcp, set_project
 
@@ -523,18 +533,36 @@ def forgeboard_solve_assembly(assembly_name: str, skip_collisions: bool = False)
         violations, and overall validation status.
     """
     try:
+        import time as _time
+        _t0 = _time.perf_counter()
+        logger.info("solve_assembly(%s, skip_collisions=%s) — starting", assembly_name, skip_collisions)
+
         project = get_project()
         assembly = project.get_assembly(assembly_name)
         if assembly is None:
             return {"error": f"Assembly '{assembly_name}' not found"}
+
+        logger.info("  Assembly has %d parts", len(assembly._parts))
 
         # Use the Build123d engine for solving if no real engine is set
         engine = project.engine
         if engine is None:
             from forgeboard.engines.build123d_engine import Build123dEngine
             engine = Build123dEngine()
+            logger.info("  Created Build123dEngine")
 
-        solved = assembly.solve(engine, skip_collisions=skip_collisions)
+        logger.info("  Calling assembly.solve(skip_collisions=%s)...", skip_collisions)
+        try:
+            solved = assembly.solve(engine, skip_collisions=skip_collisions)
+        except Exception as solve_err:
+            _t1 = _time.perf_counter()
+            logger.error("  solve() FAILED after %.2fs: %s", _t1 - _t0, solve_err)
+            logger.error("  Traceback: %s", traceback.format_exc())
+            return {"error": f"solve() failed after {_t1 - _t0:.1f}s: {solve_err}",
+                    "traceback": traceback.format_exc()}
+        _t1 = _time.perf_counter()
+        logger.info("  solve() completed in %.2fs — %d parts solved, %d collisions",
+                     _t1 - _t0, len(solved.parts), len(solved.collisions))
 
         # Build placements dict
         placements = {}

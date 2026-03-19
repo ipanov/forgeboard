@@ -8,8 +8,12 @@ collision and validation reports.
 
 from __future__ import annotations
 
+import logging
+import time as _time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+
+logger = logging.getLogger("forgeboard.assembly")
 
 from forgeboard.assembly.collision import (
     Collision,
@@ -294,10 +298,12 @@ class Assembly:
         SolvedAssembly
             Frozen result with placements, collision report, etc.
         """
+        _t0 = _time.perf_counter()
         solved_parts: dict[str, SolvedPart] = {}
 
         # Dry-fit: auto-generate bounding-box geometry for parts that have
         # dimensions metadata but no real CAD shape (native=None).
+        proxy_count = 0
         for name in self._order:
             entry = self._parts[name]
             if entry.shape.native is None and "_dimensions" in entry.shape.metadata:
@@ -313,6 +319,9 @@ class Assembly:
                     proxy.metadata = entry.shape.metadata
                     proxy.metadata["_is_proxy"] = True
                     entry.shape = proxy
+                    proxy_count += 1
+        logger.info("  [solve] Created %d bounding-box proxies in %.2fs",
+                     proxy_count, _time.perf_counter() - _t0)
 
         # Build a lookup for constraints declared globally
         global_by_target: dict[str, list[tuple[str, Constraint]]] = {}
@@ -391,9 +400,14 @@ class Assembly:
                 interfaces=dict(entry.interfaces),
             )
 
+        logger.info("  [solve] Constraint resolution done in %.2fs — %d parts placed",
+                     _time.perf_counter() - _t0, len(solved_parts))
+
         # Collision detection (skip for fast dry-fit layout validation)
         collisions = []
         clearance_violations = []
+        if skip_collisions:
+            logger.info("  [solve] Skipping collision detection (skip_collisions=True)")
         if not skip_collisions:
             shape_map = {name: sp.shape for name, sp in solved_parts.items()}
             collisions = check_pairwise_collisions(

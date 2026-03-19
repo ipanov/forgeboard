@@ -238,6 +238,11 @@ Supported constraint types: `mate`, `flush`, `align`, `offset`, `angle`.
 
 Solve constraint positions, run collision detection and clearance checks.
 
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `assembly_name` | string | Yes | Name of the assembly to solve |
+| `skip_collisions` | boolean | No | If `true`, skip expensive pairwise collision detection. Use for fast dry-fit layout validation where you only need to verify that constraints resolve and parts have positions. Defaults to `false`. |
+
 **Returns:**
 ```json
 {
@@ -436,6 +441,35 @@ Here is how an AI assistant would create a simple 3-component assembly:
       output_path="output/motor_mount.step"
     )
 ```
+
+## Dry-Fit Workflow
+
+ForgeBoard supports a dry-fit validation workflow that lets you validate
+assembly layout before detailed CAD models exist. When a component has
+`dimensions` (length, width, height) but no imported STEP geometry, the
+assembly solver automatically generates Build123d bounding-box proxies
+and uses those for positioning.
+
+**Steps:**
+
+1. Register components with `forgeboard_add_component`, providing at
+   minimum `dimensions` with `length`, `width`, and `height` keys.
+
+2. Add components to an assembly with `forgeboard_add_to_assembly` and
+   define constraints between interfaces.
+
+3. Solve with `forgeboard_solve_assembly(assembly_name, skip_collisions=true)`
+   to get placements quickly without running the pairwise collision pass.
+
+4. Inspect the returned `placements` dict to verify that parts are
+   positioned where you expect them.
+
+5. Later, import real STEP files and re-solve with `skip_collisions=false`
+   for full collision and clearance validation.
+
+This workflow is useful during early design exploration when you want to
+confirm that parts fit within an envelope and constraints are satisfiable
+before investing time in detailed geometry.
 
 ## Error Handling
 

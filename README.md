@@ -68,12 +68,21 @@ assembly.export_bom("output/bom.csv")
 
 - **Build123d Engine** -- powered by the Build123d CAD kernel for precise
   solid modeling with full OCCT support
+- **Swappable CAD Backend** -- the `CadEngine` Protocol defines the
+  interface for geometry operations. Build123d is the default; other
+  backends (e.g., FreeCAD) can be plugged in by implementing the protocol
 - **Constraint-Based Assembly** -- define mate pairs, axis alignments, and
   offsets; the solver positions components automatically
+- **Dry-Fit Bounding-Box Validation** -- the assembly solver auto-generates
+  Build123d box proxies from component dimensions when no detailed CAD
+  geometry exists yet. This lets you validate layout, clearances, and
+  spatial fit early in the design process without modeling every part
 - **Collision Detection** -- interference checks between all component pairs
-  before export
+  before export. Pass `skip_collisions=True` to the solver for fast layout
+  validation that skips the expensive pairwise collision pass
 - **BOM Generation** -- structured bills of materials in CSV, JSON, or
-  YAML with mass, material, and sourcing data
+  YAML with mass, material, and sourcing data. Cost calculation accepts
+  both `unit_cost` and `unit_cost_usd` keys in the procurement dict
 - **MCP Server** -- Model Context Protocol server for integration with
   AI coding agents (Claude Code, etc.)
 - **STEP/STL Export** -- production-ready output in industry-standard formats

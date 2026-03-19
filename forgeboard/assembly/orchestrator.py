@@ -272,6 +272,7 @@ class Assembly:
         engine: CadEngine,
         collision_tolerance_mm3: float = 1.0,
         clearance_min_mm: float = 0.2,
+        skip_collisions: bool = False,
     ) -> SolvedAssembly:
         """Iteratively solve all constraints and produce a SolvedAssembly.
 
@@ -390,14 +391,17 @@ class Assembly:
                 interfaces=dict(entry.interfaces),
             )
 
-        # Collision detection
-        shape_map = {name: sp.shape for name, sp in solved_parts.items()}
-        collisions = check_pairwise_collisions(
-            shape_map, engine, tolerance_mm3=collision_tolerance_mm3
-        )
-        clearance_violations = check_clearance(
-            shape_map, engine, min_gap_mm=clearance_min_mm
-        )
+        # Collision detection (skip for fast dry-fit layout validation)
+        collisions = []
+        clearance_violations = []
+        if not skip_collisions:
+            shape_map = {name: sp.shape for name, sp in solved_parts.items()}
+            collisions = check_pairwise_collisions(
+                shape_map, engine, tolerance_mm3=collision_tolerance_mm3
+            )
+            clearance_violations = check_clearance(
+                shape_map, engine, min_gap_mm=clearance_min_mm
+            )
 
         return SolvedAssembly(
             name=self.name,

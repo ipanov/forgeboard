@@ -505,7 +505,7 @@ def forgeboard_add_to_assembly(
 
 
 @mcp.tool()
-def forgeboard_solve_assembly(assembly_name: str) -> dict:
+def forgeboard_solve_assembly(assembly_name: str, skip_collisions: bool = False) -> dict:
     """Solve constraint positions and run collision detection.
 
     This is the key validation tool.  It solves all geometric constraints
@@ -514,6 +514,9 @@ def forgeboard_solve_assembly(assembly_name: str) -> dict:
 
     Args:
         assembly_name: Name of the assembly to solve.
+        skip_collisions: If True, skip expensive pairwise collision detection.
+            Use this for fast dry-fit layout validation where you only need
+            to verify that constraints resolve and parts have positions.
 
     Returns:
         Placement results, collisions (with severity), clearance
@@ -531,7 +534,7 @@ def forgeboard_solve_assembly(assembly_name: str) -> dict:
             from forgeboard.engines.build123d_engine import Build123dEngine
             engine = Build123dEngine()
 
-        solved = assembly.solve(engine)
+        solved = assembly.solve(engine, skip_collisions=skip_collisions)
 
         # Build placements dict
         placements = {}

@@ -295,6 +295,24 @@ class Assembly:
         """
         solved_parts: dict[str, SolvedPart] = {}
 
+        # Dry-fit: auto-generate bounding-box geometry for parts that have
+        # dimensions metadata but no real CAD shape (native=None).
+        for name in self._order:
+            entry = self._parts[name]
+            if entry.shape.native is None and "_dimensions" in entry.shape.metadata:
+                dims = entry.shape.metadata["_dimensions"]
+                length = float(dims.get("length", 0))
+                width = float(dims.get("width", 0))
+                height = float(dims.get("height", 0))
+                if length > 0 and width > 0 and height > 0:
+                    proxy = engine.create_box(length, width, height)
+                    proxy.name = entry.shape.name
+                    proxy.mass_kg = entry.shape.mass_kg
+                    proxy.material = entry.shape.material
+                    proxy.metadata = entry.shape.metadata
+                    proxy.metadata["_is_proxy"] = True
+                    entry.shape = proxy
+
         # Build a lookup for constraints declared globally
         global_by_target: dict[str, list[tuple[str, Constraint]]] = {}
         for part_a_name, part_b_name, constraint in self._global_constraints:

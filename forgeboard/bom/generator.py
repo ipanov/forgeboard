@@ -100,7 +100,7 @@ def _spec_to_entry(spec: ComponentSpec, quantity: int = 1) -> BOMEntry:
     # Extract supplier and unit cost from procurement dict.
     if spec.procurement:
         supplier = str(spec.procurement.get("supplier", ""))
-        raw_cost = spec.procurement.get("unit_cost")
+        raw_cost = spec.procurement.get("unit_cost") or spec.procurement.get("unit_cost_usd")
         if raw_cost is not None:
             unit_cost = float(raw_cost)
 

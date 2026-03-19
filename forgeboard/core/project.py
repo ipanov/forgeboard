@@ -114,6 +114,8 @@ class ForgeProject:
         self.event_bus = EventBus()
         self.assemblies: dict[str, Any] = {}
         self._engine: Any = None
+        self._manufacturing_config: Any = None
+        self._manufacturing_estimator: Any = None
 
         # Wire up cascade engine to event bus
         self.cascade.register_listener(_EventBusBridge(self.event_bus))
@@ -252,7 +254,7 @@ class ForgeProject:
 
             if spec.procurement:
                 supplier = str(spec.procurement.get("supplier", ""))
-                raw_cost = spec.procurement.get("unit_cost")
+                raw_cost = spec.procurement.get("unit_cost") or spec.procurement.get("unit_cost_usd")
                 if raw_cost is not None:
                     unit_cost = float(raw_cost)
 
@@ -414,6 +416,38 @@ class ForgeProject:
     def engine(self) -> Any:
         """The current CAD engine, if any."""
         return self._engine
+
+    # -- Manufacturing -------------------------------------------------------
+
+    def set_manufacturing_config(self, config: Any) -> None:
+        """Set the manufacturing configuration (owned tools, materials, location).
+
+        Accepts a :class:`~forgeboard.manufacturing.estimator.ProjectManufacturingConfig`.
+        """
+        self._manufacturing_config = config
+        # Reset the estimator so it picks up the new config
+        self._manufacturing_estimator = None
+
+    @property
+    def manufacturing_config(self) -> Any:
+        """The current manufacturing configuration, if any."""
+        return self._manufacturing_config
+
+    def get_manufacturing_estimator(self) -> Any:
+        """Return a :class:`~forgeboard.manufacturing.estimator.ManufacturingEstimator`.
+
+        Lazily created from the current manufacturing config.
+        Returns None if no manufacturing config is set.
+        """
+        if self._manufacturing_config is None:
+            return None
+
+        if self._manufacturing_estimator is None:
+            from forgeboard.manufacturing.estimator import ManufacturingEstimator
+            self._manufacturing_estimator = ManufacturingEstimator(
+                config=self._manufacturing_config
+            )
+        return self._manufacturing_estimator
 
     # -- Summary ------------------------------------------------------------
 

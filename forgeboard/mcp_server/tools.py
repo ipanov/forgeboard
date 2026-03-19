@@ -468,14 +468,20 @@ def forgeboard_add_to_assembly(
                 else:
                     return {"error": f"Unknown constraint type: {c_type}"}
 
-        # Create a placeholder shape for the part.
-        # In a full CAD workflow, this would come from the engine.
-        # For now, we create a simple placeholder that carries the spec info.
+        # Create a bounding-box proxy shape for dry-fit validation.
+        # If the component has length/width/height dimensions, we generate
+        # real geometry so the solver can check collisions and clearances.
+        # If dimensions are missing, we fall back to a null placeholder.
         from forgeboard.engines.base import Shape
 
         shape = Shape(native=None, name=instance_name)
         if spec.mass_g is not None:
             shape.mass_kg = spec.mass_g / 1000.0
+
+        # Store dimensions in metadata for deferred bounding-box creation
+        if spec.dimensions:
+            shape.metadata["_dimensions"] = dict(spec.dimensions)
+            shape.metadata["_component_id"] = component_id
 
         assembly.add_part(
             name=instance_name,
@@ -519,11 +525,11 @@ def forgeboard_solve_assembly(assembly_name: str) -> dict:
         if assembly is None:
             return {"error": f"Assembly '{assembly_name}' not found"}
 
-        # Use the mock engine for solving if no real engine is set
+        # Use the Build123d engine for solving if no real engine is set
         engine = project.engine
         if engine is None:
-            from forgeboard.engines.base import CadEngine
-            engine = CadEngine()
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
 
         solved = assembly.solve(engine)
 
@@ -602,8 +608,8 @@ def forgeboard_validate_assembly(assembly_name: str) -> dict:
 
         engine = project.engine
         if engine is None:
-            from forgeboard.engines.base import CadEngine
-            engine = CadEngine()
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
 
         solved = assembly.solve(engine)
 
@@ -814,8 +820,8 @@ def forgeboard_export_step(
 
         engine = project.engine
         if engine is None:
-            from forgeboard.engines.base import CadEngine
-            engine = CadEngine()
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
 
         solved = assembly.solve(engine)
         result_path = export_assembly_step(solved, output_path, engine)
@@ -857,8 +863,8 @@ def forgeboard_export_stl(
 
         engine = project.engine
         if engine is None:
-            from forgeboard.engines.base import CadEngine
-            engine = CadEngine()
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
 
         solved = assembly.solve(engine)
         Assembly.export(solved, engine, output_path, fmt="stl")
@@ -903,8 +909,8 @@ def forgeboard_render_views(
 
         engine = project.engine
         if engine is None:
-            from forgeboard.engines.base import CadEngine
-            engine = CadEngine()
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
 
         solved = assembly.solve(engine)
 
@@ -1179,6 +1185,286 @@ def forgeboard_add_dependency(
             "target": target,
             "formula": formula or "source",
             "total_edges": len(project.graph.edges),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Manufacturing tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def forgeboard_configure_manufacturing(
+    user_location: str = "",
+    labor_rate_per_hour: float = 30.0,
+    overhead_rate: float = 0.15,
+) -> dict:
+    """Configure the project's manufacturing settings.
+
+    Sets the user's location (for local-first service bureau search),
+    labor rate, and overhead multiplier.  Call this before estimating
+    manufacturing costs for custom parts.
+
+    Args:
+        user_location: User's location for local-first search.
+                       Example: "Skopje, MK"
+        labor_rate_per_hour: Labor cost in USD/hour (default 30).
+        overhead_rate: Overhead multiplier (default 0.15 = 15%).
+
+    Returns:
+        Confirmation with current config.
+    """
+    try:
+        from forgeboard.manufacturing.estimator import ProjectManufacturingConfig
+
+        project = get_project()
+        # Parse "City, CC" format into country + city
+        country = ""
+        city = ""
+        if user_location:
+            parts = [p.strip() for p in user_location.split(",")]
+            if len(parts) >= 2:
+                city = parts[0]
+                country = parts[1]
+            else:
+                city = parts[0]
+
+        config = ProjectManufacturingConfig(
+            user_country=country,
+            user_city=city,
+            labor_rate_per_hour=labor_rate_per_hour,
+            overhead_rate=overhead_rate,
+        )
+        project.set_manufacturing_config(config)
+
+        return {
+            "status": "configured",
+            "user_country": country,
+            "user_city": city,
+            "labor_rate_per_hour": labor_rate_per_hour,
+            "overhead_rate": overhead_rate,
+            "tools_count": len(config.owned_tools),
+            "materials_count": len(config.available_materials),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def forgeboard_add_manufacturing_tool(
+    tool_id: str,
+    name: str,
+    tool_type: str,
+    purchase_cost: float = 0.0,
+    expected_lifetime_hours: float = 5000.0,
+    maintenance_cost_per_hour: float = 0.0,
+    power_cost_per_hour: float = 0.0,
+    compatible_materials: list[str] | None = None,
+    build_envelope_mm: dict[str, float] | None = None,
+) -> dict:
+    """Register a manufacturing tool the user owns.
+
+    This is totally generic -- any type of fabrication equipment.
+    The tool_type maps to a manufacturing method ID (e.g. "additive",
+    "subtractive", "sheet_fabrication", etc.).
+
+    Args:
+        tool_id: Unique identifier for this tool.
+        name: Human-readable name (e.g. "Prusa MK4", "Haas VF-2").
+        tool_type: Manufacturing method ID this tool performs.
+        purchase_cost: Purchase price for amortization calculation.
+        expected_lifetime_hours: Expected total operating hours.
+        maintenance_cost_per_hour: Hourly maintenance cost.
+        power_cost_per_hour: Hourly power cost.
+        compatible_materials: List of material IDs this tool can use.
+        build_envelope_mm: Max dimensions dict (x_max, y_max, z_max).
+
+    Returns:
+        Tool details including computed hourly rate.
+    """
+    try:
+        from forgeboard.manufacturing.types import ManufacturingTool
+
+        project = get_project()
+        if project.manufacturing_config is None:
+            return {"error": "Call forgeboard_configure_manufacturing first"}
+
+        tool = ManufacturingTool(
+            id=tool_id,
+            name=name,
+            tool_type=tool_type,
+            purchase_cost=purchase_cost,
+            expected_lifetime_hours=expected_lifetime_hours,
+            maintenance_cost_per_hour=maintenance_cost_per_hour,
+            power_cost_per_hour=power_cost_per_hour,
+            compatible_materials=compatible_materials or [],
+            build_envelope_mm=build_envelope_mm or {},
+        )
+        project.manufacturing_config.owned_tools.append(tool)
+        project._manufacturing_estimator = None
+
+        return {
+            "status": "added",
+            "tool_id": tool_id,
+            "name": name,
+            "tool_type": tool_type,
+            "hourly_rate": round(tool.total_hourly_rate, 4),
+            "amortization_per_hour": round(tool.amortization_per_hour, 4),
+            "total_tools": len(project.manufacturing_config.owned_tools),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def forgeboard_add_raw_material(
+    material_id: str,
+    name: str,
+    material_type: str,
+    cost_per_unit: float,
+    unit: str = "kg",
+    density_g_cm3: float = 0.0,
+    compatible_methods: list[str] | None = None,
+    supplier: str = "",
+) -> dict:
+    """Register a raw material available for manufacturing.
+
+    Args:
+        material_id: Unique identifier (e.g. "pla_white", "al6061_plate").
+        name: Human-readable name.
+        material_type: Type category (e.g. "filament", "plate", "sheet").
+        cost_per_unit: Cost per unit of measure.
+        unit: Unit of measure (e.g. "kg", "m", "m2", "L").
+        density_g_cm3: Material density for volume/mass conversion.
+        compatible_methods: Method IDs this material works with.
+        supplier: Supplier name.
+
+    Returns:
+        Material registration confirmation.
+    """
+    try:
+        from forgeboard.manufacturing.types import RawMaterial
+
+        project = get_project()
+        if project.manufacturing_config is None:
+            return {"error": "Call forgeboard_configure_manufacturing first"}
+
+        material = RawMaterial(
+            id=material_id,
+            name=name,
+            material_type=material_type,
+            cost_per_unit=cost_per_unit,
+            unit=unit,
+            density_g_cm3=density_g_cm3,
+            compatible_methods=compatible_methods or [],
+            supplier=supplier,
+        )
+        project.manufacturing_config.available_materials.append(material)
+        project._manufacturing_estimator = None
+
+        return {
+            "status": "added",
+            "material_id": material_id,
+            "name": name,
+            "cost_per_unit": cost_per_unit,
+            "unit": unit,
+            "total_materials": len(project.manufacturing_config.available_materials),
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def forgeboard_estimate_manufacturing_cost(
+    component_id: str,
+    method: str | None = None,
+    volume_cm3: float = 0.0,
+    estimated_time_hours: float = 0.0,
+) -> dict:
+    """Estimate the manufacturing cost for a custom component.
+
+    Walks the fallback chain: in-house tool -> local service ->
+    online service -> LLM estimate.
+
+    Args:
+        component_id: ID of the component to estimate.
+        method: Manufacturing method ID (auto-inferred from material if omitted).
+        volume_cm3: Part volume (from geometry or mesh).  If 0, estimated from mass.
+        estimated_time_hours: Estimated fabrication time.  If 0, estimated from volume.
+
+    Returns:
+        Manufacturing quote with cost breakdown and source.
+    """
+    try:
+        from forgeboard.manufacturing.estimator import infer_method_from_material
+        from forgeboard.manufacturing.types import PartGeometry
+
+        project = get_project()
+        spec = project.get_component(component_id)
+        if spec is None:
+            return {"error": f"Component {component_id!r} not found"}
+
+        if spec.is_cots:
+            unit_cost = 0.0
+            supplier = ""
+            if spec.procurement:
+                unit_cost = float(spec.procurement.get("unit_cost", 0))
+                supplier = str(spec.procurement.get("supplier", ""))
+            return {
+                "source": "procurement",
+                "total_cost": unit_cost,
+                "supplier": supplier,
+                "confidence": 1.0,
+                "notes": "COTS component - procurement cost",
+            }
+
+        estimator = project.get_manufacturing_estimator()
+        if estimator is None:
+            return {"error": "No manufacturing config. Call forgeboard_configure_manufacturing first."}
+
+        method_id = method
+        if method_id is None:
+            mat_name = spec.material.name if spec.material else ""
+            method_id = infer_method_from_material(mat_name)
+        if method_id is None:
+            mfg = str(spec.metadata.get("manufacturing_method", ""))
+            method_id = mfg.lower() if mfg else "unknown"
+
+        vol = volume_cm3
+        if vol <= 0 and spec.mass_g and spec.material and spec.material.density_g_cm3 > 0:
+            vol = spec.mass_g / spec.material.density_g_cm3
+
+        geometry = PartGeometry(
+            volume_cm3=vol,
+            estimated_print_time_hours=estimated_time_hours,
+            estimated_machining_time_hours=estimated_time_hours,
+        )
+
+        mat_name = spec.material.name if spec.material else ""
+        quote = estimator.estimate_with_fallback(method_id, mat_name, geometry)
+        if quote is None:
+            return {
+                "error": "No estimate available from any source",
+                "method": method_id,
+                "material": mat_name,
+                "volume_cm3": vol,
+            }
+
+        return {
+            "total_cost": quote.total_cost,
+            "material_cost": quote.material_cost,
+            "tool_cost": quote.tool_cost,
+            "labor_cost": quote.labor_cost,
+            "overhead_cost": quote.overhead_cost,
+            "method": quote.method,
+            "material": quote.material,
+            "source": quote.source,
+            "source_name": quote.source_name,
+            "confidence": quote.confidence,
+            "lead_time_days": quote.lead_time_days,
+            "notes": quote.notes,
         }
     except Exception as exc:
         return {"error": str(exc)}

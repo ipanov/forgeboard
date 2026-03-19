@@ -617,6 +617,81 @@ def forgeboard_solve_assembly(assembly_name: str, skip_collisions: bool = False)
 
 
 @mcp.tool()
+def forgeboard_dry_fit(assembly_name: str) -> dict:
+    """Fast dry-fit layout validation without collision detection.
+
+    Resolves constraint positions and generates bounding-box proxies
+    from component dimensions.  Skips expensive OCCT pairwise collision
+    checks so it completes in under 1 second even for large assemblies.
+
+    Use this for rapid iterative layout validation.  Run the full
+    solve_assembly (with collision detection) only after importing
+    real STEP geometry.
+
+    Args:
+        assembly_name: Name of the assembly to dry-fit.
+
+    Returns:
+        Placement results for each part and proxy generation stats.
+    """
+    try:
+        import time as _time
+        _t0 = _time.perf_counter()
+        logger.info("dry_fit(%s) — starting", assembly_name)
+
+        project = get_project()
+        assembly = project.get_assembly(assembly_name)
+        if assembly is None:
+            return {"error": f"Assembly '{assembly_name}' not found"}
+
+        logger.info("  Assembly has %d parts", len(assembly._parts))
+
+        engine = project.engine
+        if engine is None:
+            from forgeboard.engines.build123d_engine import Build123dEngine
+            engine = Build123dEngine()
+            logger.info("  Created Build123dEngine")
+
+        logger.info("  Solving (skip_collisions=True)...")
+        try:
+            solved = assembly.solve(engine, skip_collisions=True)
+        except Exception as solve_err:
+            _t1 = _time.perf_counter()
+            logger.error("  dry_fit FAILED after %.2fs: %s", _t1 - _t0, solve_err)
+            return {"error": f"dry_fit failed after {_t1 - _t0:.1f}s: {solve_err}",
+                    "traceback": traceback.format_exc()}
+
+        _t1 = _time.perf_counter()
+        logger.info("  dry_fit completed in %.2fs — %d parts", _t1 - _t0, len(solved.parts))
+
+        placements = {}
+        proxy_count = 0
+        for name, sp in solved.parts.items():
+            is_proxy = sp.shape.metadata.get("_is_proxy", False) if sp.shape else False
+            if is_proxy:
+                proxy_count += 1
+            placements[name] = {
+                "position": {
+                    "x": round(sp.placement.position.x, 2),
+                    "y": round(sp.placement.position.y, 2),
+                    "z": round(sp.placement.position.z, 2),
+                },
+                "is_proxy": is_proxy,
+            }
+
+        return {
+            "assembly_name": solved.name,
+            "part_count": len(solved.parts),
+            "proxy_count": proxy_count,
+            "placements": placements,
+            "solve_time_seconds": round(_t1 - _t0, 3),
+            "collisions_skipped": True,
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
 def forgeboard_validate_assembly(assembly_name: str) -> dict:
     """Run the full validation pipeline on an assembly.
 
